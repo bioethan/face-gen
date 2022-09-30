@@ -36,7 +36,9 @@ def resize_images(DATA_PATH_STR, IMAGE_SIZE, SAVE_PATH_STR):
       SAVE_PATH = Path(SAVE_PATH_STR)
       SAVE_PATH.mkdir(parents=True, exist_ok=True)
 
-   assert len(os.listdir(SAVE_PATH)) < 15, f'Save directory has more than 15 files, and so quitting to avoid overlapping.'
+   if len(os.listdir(SAVE_PATH)) > 15: 
+      print(f'Save directory has more than 15 files, and so quitting to avoid overlapping.')
+      return SAVE_PATH
 
 
    ########
