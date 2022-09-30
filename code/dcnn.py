@@ -15,16 +15,17 @@ import os
 from PIL import Image
 from torch.autograd import Variable
 from torchvision.utils import save_image, make_grid
+from utils import *
+from pathlib import Path
 
 # Global vars 
 # Loading the data
 TRIAL_NUM = 2
-batch_size = 100
+batch_size = 25
 image_size = 256
 
-gen_init_image = 32
-num_gen_features = 250
-
+gen_init_image = 8
+num_gen_features = 900
 gen_learning_rate =  0.0002
 dis_learning_rate = 0.0002
 
@@ -34,12 +35,13 @@ NUM_EPOCHS = 2500
 BETA = 0.5
 
 # Paths for saving data
-SAVE_PATH = '/home/ethanbrown/code/results/trial%d/' % TRIAL_NUM
+SAVE_PATH = Path('/home/ethanbrown/face-gen/code/results/trial%d' % TRIAL_NUM)
+SAVE_PATH.mkdir(parents=True, exist_ok=True)
 
 # Modifying images as needed for the size of the neural network 
-DATA_PATH = '/home/ethanbrown/data_general/data/'
+DATA_PATH = '/home/ethanbrown/face-gen/data_general/data'
 
-
+curr_DATA_PATH = resize_images(DATA_PATH, 128, '/home/ethanbrown/face-gen/data_general/data_128')
 
 # Using colab GPU for quick training
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -92,36 +94,30 @@ class Generator(nn.Module):
 
       # Convolutional blocks with upsampling to increase the image size
       self.conv_block = nn.Sequential(
-      nn.BatchNorm2d(num_gen_features),
-      nn.Upsample(scale_factor=2),
-      nn.Conv2d(num_gen_features, 80, 3, stride=2, padding=1),
-
-      nn.BatchNorm2d(80, 0.8),
+      #  8x8 input, 12x12 out
+      nn.ConvTranspose2d(in_channels=num_gen_features, out_channels=1000, kernel_size=5, stride=1, padding=1),
+      nn.BatchNorm2d(1000, 0.8),
       nn.LeakyReLU(0.2),
-      nn.Upsample(scale_factor=2),
-      nn.Conv2d(80, 64, 3, stride=2, padding=1),
 
-      nn.BatchNorm2d(64, 0.8),
+      # 12x12 in, 25x25 out
+      nn.ConvTranspose2d(in_channels=1000, out_channels=500, kernel_size=8, stride=3, padding=1),
+      nn.BatchNorm2d(500, 0.8),
       nn.LeakyReLU(0.2),
-      nn.Upsample(scale_factor=2),
-      nn.Conv2d(64, 20, 2, stride=1, padding=1),
 
-      nn.BatchNorm2d(20, 0.8),
+      # 25x25 in, 96x96 out
+      nn.ConvTranspose2d(in_channels=500, out_channels=360, kernel_size=8, stride=4, padding=2),
+      nn.BatchNorm2d(360, 0.8),
       nn.LeakyReLU(0.2),
-      nn.Upsample(scale_factor=2),
-      nn.Conv2d(20, 3, 3, stride=1, padding=0),
+
+      nn.ConvTranspose2d(in_channels=360, out_channels=3, kernel_size=5, stride=1, padding=4),
 
       # Activation Function
       nn.Tanh())
 
    def forward(self, x):
-      #print('Input = ', x.size())
       out = self.latent_reshape(x)
-      #print('Out_linear = ', out.size())
       out = out.view(out.shape[0], num_gen_features, gen_init_image, gen_init_image)
-      #print('Reshaping Size = ', out.size())
       img = self.conv_block(out)
-      #print(img.size())
       return img
 
 # Function to initialize weights as recommended Normal(0, 0.02)
@@ -144,11 +140,11 @@ def prep_image(img):
 data_matrix = []
 tensor_maker = transforms.ToTensor()
 
-list_images = os.listdir('/home/ethanbrown/data_general/data_jpg/')
+list_images = os.listdir(curr_DATA_PATH)
 list_images = [x for x in list_images if x[0] != '.']
 
 for i in list_images:
-   png_img = Image.open('/home/ethanbrown/data_general/data_jpg/' + i)
+   png_img = Image.open(curr_DATA_PATH / i)
    img_arr = tensor_maker(png_img)
    data_matrix.append(img_arr)
    png_img.close()
@@ -232,7 +228,7 @@ for epoch in range(NUM_EPOCHS):
       if epoch % 5 == 0 and i == 0:
          print("Epoch %d/%d -- Dis loss: %f -- Gen loss: %f" % ((epoch), (NUM_EPOCHS), dis_loss.item(), gen_loss.item()))
          # Save 5x5 rows of images
-         save_image(gen_imgs.data[:25], SAVE_PATH + 'EPOCH%d_ITER%d.png' % ((epoch), i), nrow=5, normalize=True)
+         save_image(gen_imgs.data[:25], SAVE_PATH / ('EPOCH%d_ITER%d.png' % ((epoch), i)), nrow=5, normalize=True)
 
 torch.save(gen.state_dict(), '/home/ethanbrown/code/models/generator_test%d.pt' % TRIAL_NUM)
 torch.save(dis.state_dict(), '/home/ethanbrown/code/models/discriminator_test%d.pt' % TRIAL_NUM)
