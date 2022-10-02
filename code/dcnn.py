@@ -20,18 +20,18 @@ from pathlib import Path
 
 # Global vars 
 # Loading the data
-TRIAL_NUM = 2
-batch_size = 25
-image_size = 256
+TRIAL_NUM = 5
+batch_size = 128
+image_size = 128
 
-gen_init_image = 8
-num_gen_features = 900
+gen_init_image = 4
+num_gen_features = 1024
 gen_learning_rate =  0.0002
 dis_learning_rate = 0.0002
 
 # Hyperparameters
-LATENT_SIZE = 200
-NUM_EPOCHS = 2500
+LATENT_SIZE = 250
+NUM_EPOCHS = 4000
 BETA = 0.5
 
 # Paths for saving data
@@ -41,7 +41,10 @@ SAVE_PATH.mkdir(parents=True, exist_ok=True)
 # Modifying images as needed for the size of the neural network 
 DATA_PATH = '/home/ethanbrown/face-gen/data_general/data'
 
-curr_DATA_PATH = resize_images(DATA_PATH, 128, '/home/ethanbrown/face-gen/data_general/data_128')
+MODEL_SAVE_PATH = Path('/home/ethanbrown/face-gen/code/models')
+MODEL_SAVE_PATH.mkdir(parents=True, exist_ok=True)
+
+curr_DATA_PATH = resize_images(DATA_PATH, image_size, '/home/ethanbrown/face-gen/data_general/data_128')
 
 # Using colab GPU for quick training
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -94,31 +97,35 @@ class Generator(nn.Module):
 
       # Convolutional blocks with upsampling to increase the image size
       self.conv_block = nn.Sequential(
-      #  8x8 input, 12x12 out
-      nn.ConvTranspose2d(in_channels=num_gen_features, out_channels=1000, kernel_size=5, stride=1, padding=1),
-      nn.BatchNorm2d(1000, 0.8),
+      # Output is 8x8
+      nn.ConvTranspose2d(in_channels=num_gen_features, out_channels=512, kernel_size=4, stride=2, padding=1, bias=False),
+      nn.BatchNorm2d(512),
       nn.LeakyReLU(0.2),
-
-      # 12x12 in, 25x25 out
-      nn.ConvTranspose2d(in_channels=1000, out_channels=500, kernel_size=8, stride=3, padding=1),
-      nn.BatchNorm2d(500, 0.8),
+      nn.ConvTranspose2d(in_channels=512, out_channels=256, kernel_size=4, stride=2, padding=2, bias=False),
+      nn.BatchNorm2d(256),
       nn.LeakyReLU(0.2),
-
-      # 25x25 in, 96x96 out
-      nn.ConvTranspose2d(in_channels=500, out_channels=360, kernel_size=8, stride=4, padding=2),
-      nn.BatchNorm2d(360, 0.8),
+      nn.ConvTranspose2d(in_channels=256, out_channels=128, kernel_size=4, stride=2, padding=0, bias=False),
+      nn.BatchNorm2d(128),
       nn.LeakyReLU(0.2),
-
-      nn.ConvTranspose2d(in_channels=360, out_channels=3, kernel_size=5, stride=1, padding=4),
-
-      # Activation Function
-      nn.Tanh())
+      nn.ConvTranspose2d(in_channels=128, out_channels=64, kernel_size=4, stride=2, padding=0, bias=False),
+      nn.BatchNorm2d(64),
+      nn.LeakyReLU(0.2),
+      nn.Upsample(scale_factor=2, mode='nearest'),
+      nn.ReflectionPad2d(1),                          
+      nn.ConvTranspose2d(in_channels=64, out_channels=3, kernel_size=3, stride=1, padding=0, bias=False),
+      nn.Tanh()
+      )
 
    def forward(self, x):
+      #print('Input = ', x.size())
       out = self.latent_reshape(x)
+      #print('Out_linear = ', out.size())
       out = out.view(out.shape[0], num_gen_features, gen_init_image, gen_init_image)
+      #print('Reshaping Size = ', out.size())
       img = self.conv_block(out)
+      #print(img.size())
       return img
+
 
 # Function to initialize weights as recommended Normal(0, 0.02)
 def weights_init(m):
@@ -230,5 +237,6 @@ for epoch in range(NUM_EPOCHS):
          # Save 5x5 rows of images
          save_image(gen_imgs.data[:25], SAVE_PATH / ('EPOCH%d_ITER%d.png' % ((epoch), i)), nrow=5, normalize=True)
 
-torch.save(gen.state_dict(), '/home/ethanbrown/code/models/generator_test%d.pt' % TRIAL_NUM)
-torch.save(dis.state_dict(), '/home/ethanbrown/code/models/discriminator_test%d.pt' % TRIAL_NUM)
+# Please work this time!
+torch.save(gen.state_dict(), MODEL_SAVE_PATH / ('generator_test%d.pt' % TRIAL_NUM))
+torch.save(dis.state_dict(), MODEL_SAVE_PATH / ('discriminator_test%d.pt' % TRIAL_NUM))
